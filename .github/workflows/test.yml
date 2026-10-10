@@ -1,12 +1,11 @@
 name: Test
 
-# Type-checks and runs the rules tests on pull requests and on pushes to any
-# branch except master, where the Deploy workflow runs the same checks before
-# it deploys. Uses no secrets, so it is safe to run on pull requests from forks.
+# Type-checks and runs the rules tests on pull requests. This is the only place
+# a pull request's tests run; pushes to master are checked by the Deploy
+# workflow before it deploys. Uses no secrets, so it is safe to run on pull
+# requests from forks.
 on:
   pull_request:
-  push:
-    branches-ignore: [master]
 
 permissions:
   contents: read
