@@ -1,0 +1,39 @@
+{
+  "name": "discord-family-feud",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run types && vite",
+    "build": "npm run types && tsc -b && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "npm run types && tsc -b",
+    "questions": "node scripts/build-questions.mjs",
+    "types": "wrangler types --strict-vars=false",
+    "dev:offline": "npm run types && vite --mode offline",
+    "eval": "node scripts/eval-grader.mjs"
+  },
+  "dependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
+    "partyserver": "^0.5.10",
+    "partysocket": "^1.3.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.63.1",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.149.0"
+  }
+}

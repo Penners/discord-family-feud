@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "discord-family-feud",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/parties/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "GameRoom", "class_name": "GameRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }],
+  "observability": { "enabled": true },
+  "vars": {
+    // Lets people play in a plain browser tab with a typed name. Turn off to make the game Discord-only.
+    "ALLOW_ANONYMOUS": "true",
+    // Allows ?as=2 style extra identities for testing several players in one browser. Keep off in production.
+    "DEV_IDENTITIES": "false",
+    // Which model judges answers: "clef" or "openai". See src/worker/grader/index.ts.
+    "GRADER": "jev",
+    // "clef" (accurate) or "clef-flash" (about 6x cheaper, but it misjudged far more answers in our eval).
+    "CLEF_MODEL": "clef",
+    // A board answer must be the top pick with at least this probability. Tuned with `npm run eval`.
+    "CLEF_THRESHOLD": "0.3"
+  },
+  // Workers AI runs on your Cloudflare account even in local dev, so `wrangler login` is needed.
+  "ai": { "binding": "AI" }
+}
