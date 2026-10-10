@@ -25,8 +25,8 @@ You need:
 ### 1. Get the code
 
 ```sh
-git clone <this repository's URL>
-cd discord-family-fued
+git clone https://github.com/Penners/discord-family-feud.git
+cd discord-family-feud
 npm install
 npx wrangler login
 ```
