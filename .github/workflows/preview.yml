@@ -1,0 +1,91 @@
+name: Preview
+
+# Gives each pull request its own copy of the game at
+# discord-family-feud-pr-<number>.<subdomain>.workers.dev, with its own rooms,
+# and deletes it when the pull request closes. Previews are for web play only:
+# Discord can only point at one address, so the Activity stays on production.
+#
+# Only runs for branches of this repository. Pull requests from forks are
+# skipped, because deploying means running their code with the Cloudflare token.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  WORKER_NAME: discord-family-feud-pr-${{ github.event.pull_request.number }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  deploy:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      # Previews judge answers with Jev when the repository has a JEV_KEY
+      # secret, and otherwise with Workers AI Clef, which needs no key.
+      - name: Deploy the preview
+        id: deploy
+        env:
+          JEV_KEY: ${{ secrets.JEV_KEY }}
+        run: |
+          grader=clef
+          if [ -n "$JEV_KEY" ]; then grader=jev; fi
+          npx wrangler deploy --name "$WORKER_NAME" --var "GRADER:$grader" | tee deploy.log
+          url=$(grep -o 'https://[^ ]*workers\.dev' deploy.log | head -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "grader=$grader" >> "$GITHUB_OUTPUT"
+
+      # Set once per preview, so sessions survive later pushes to the same pull request.
+      - name: Set the preview's secrets
+        env:
+          JEV_KEY: ${{ secrets.JEV_KEY }}
+        run: |
+          existing=$(npx wrangler secret list --name "$WORKER_NAME")
+          if ! echo "$existing" | grep -q '"SESSION_SECRET"'; then
+            openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET --name "$WORKER_NAME"
+          fi
+          if [ -n "$JEV_KEY" ] && ! echo "$existing" | grep -q '"JEV_KEY"'; then
+            echo "$JEV_KEY" | npx wrangler secret put JEV_KEY --name "$WORKER_NAME"
+          fi
+
+      - name: Post the preview link
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          GRADER: ${{ steps.deploy.outputs.grader }}
+        run: |
+          body="**Preview:** $PREVIEW_URL
+
+          Built from ${{ github.event.pull_request.head.sha }}. Answers are judged by \`$GRADER\`. Web play only; deleted when this pull request closes."
+          gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --edit-last --create-if-none --body "$body"
+
+  cleanup:
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Succeeds even if the preview was never deployed.
+      - name: Delete the preview
+        run: npx wrangler delete --name "$WORKER_NAME" --force || echo "No preview to delete"
