@@ -126,11 +126,19 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-.end-game {
+.corner-controls {
   position: fixed;
   top: 10px;
   left: 12px;
   z-index: 5;
+  display: flex;
+  gap: 8px;
+}
+.end-game.dev {
+  border-style: dashed;
+  color: var(--gold);
+}
+.end-game {
   display: flex;
   align-items: center;
   gap: 8px;

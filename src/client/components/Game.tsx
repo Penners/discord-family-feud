@@ -6,7 +6,7 @@ import { otherTeam, TEAM_IDS } from "../../shared/types";
 import type { Attempt, Player, PublicRound, PublicState, RoundStage, TeamId } from "../../shared/types";
 import { useCountdown, usePrevious } from "../hooks";
 import { playSound } from "../sounds";
-import { send } from "../store";
+import { send, useStore } from "../store";
 import { Avatar } from "./Avatar";
 import { Board } from "./Board";
 
@@ -356,6 +356,7 @@ function Finished() {
 
 /** Ends the game for everyone. Asks first, since one stray click would wipe the scores. */
 export function EndGameButton() {
+  const dev = useStore((s) => s.dev && s.game?.phase === "playing");
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     if (!confirming) return;
@@ -364,16 +365,26 @@ export function EndGameButton() {
   }, [confirming]);
   if (!confirming) {
     return (
-      <button className="end-game" onClick={() => setConfirming(true)}>
-        End game
-      </button>
+      <div className="corner-controls">
+        <button className="end-game" onClick={() => setConfirming(true)}>
+          End game
+        </button>
+        {/* Testing shortcut, offered only when the server allows it: skips straight to Fast Money. */}
+        {dev && (
+          <button className="end-game dev" onClick={() => send({ type: "devWin" })}>
+            Dev: win now
+          </button>
+        )}
+      </div>
     );
   }
   return (
-    <div className="end-game confirming" role="alertdialog" aria-label="End the game for everyone?">
-      End for everyone?
-      <button onClick={() => send({ type: "endGame" })}>Yes, end it</button>
-      <button onClick={() => setConfirming(false)}>No</button>
+    <div className="corner-controls">
+      <div className="end-game confirming" role="alertdialog" aria-label="End the game for everyone?">
+        End for everyone?
+        <button onClick={() => send({ type: "endGame" })}>Yes, end it</button>
+        <button onClick={() => setConfirming(false)}>No</button>
+      </div>
     </div>
   );
 }

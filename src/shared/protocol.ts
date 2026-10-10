@@ -23,7 +23,8 @@ export const ClientMessage = z.discriminatedUnion("type", [
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
 export type ServerMessage =
-  | { type: "hello"; userId: string; presetName: string | null }
+  /** `dev` is true when the server has its development features on (DEV_IDENTITIES). */
+  | { type: "hello"; userId: string; presetName: string | null; dev: boolean }
   | { type: "state"; state: PublicState; serverNow: number }
   | { type: "error"; message: string };
 

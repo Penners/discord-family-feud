@@ -55,7 +55,12 @@ export class GameRoom extends Server<Env> {
     const identity = readIdentity(ctx.request);
     if (!identity) return connection.close(4401, "Unauthorized");
     connection.setState({ userId: identity.userId });
-    this.send(connection, { type: "hello", userId: identity.userId, presetName: identity.name ?? null });
+    this.send(connection, {
+      type: "hello",
+      userId: identity.userId,
+      presetName: identity.name ?? null,
+      dev: this.env.DEV_IDENTITIES === "true",
+    });
     this.dispatch({
       type: "connect",
       playerId: identity.userId,
