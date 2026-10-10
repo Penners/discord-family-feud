@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npm run types && vite",
-    "build": "npm run types && tsc -b && vite build",
+    "dev": "npm run questions && npm run types && vite",
+    "build": "npm run questions && npm run types && tsc -b && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "test": "vitest run",
@@ -13,7 +13,7 @@
     "typecheck": "npm run types && tsc -b",
     "questions": "node scripts/build-questions.mjs",
     "types": "wrangler types --strict-vars=false",
-    "dev:offline": "npm run types && vite --mode offline",
+    "dev:offline": "npm run questions && npm run types && vite --mode offline",
     "eval": "node scripts/eval-grader.mjs"
   },
   "dependencies": {

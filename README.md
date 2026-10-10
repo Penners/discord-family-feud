@@ -206,7 +206,8 @@ cloudflared tunnel --url http://localhost:5173
 
 - `npm test` runs the rules tests.
 - `npm run typecheck` checks types.
-- `npm run questions` rebuilds the question bundle after editing `data/megalist-normalised.json`.
+- `npm run questions` rebuilds the question bundle from `data/megalist-normalised.json`. `npm run dev`
+  and `npm run build` do this for you, so an edit to the list takes effect on the next start or deploy.
 - `npm run eval` scores the grader against the labelled answers in `evals/grading-cases.json`.
   It needs the dev server running and makes one model call per case. Useful options:
   `--limit 40` for a quick sample, `--grader jev` to score another grader without changing
