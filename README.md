@@ -168,7 +168,7 @@ there, a sudden-death round is decided on the top answer. Face-off, play or pass
 strikes and one steal attempt follow the current US show.
 
 - The winning team plays Fast Money: two players answer the same five questions against the
-  clock (20 seconds, then 25) and need 200 points between them. The team chooses who plays;
+  clock (40 seconds, then 50, since answers are typed) and need 200 points between them. The team chooses who plays;
   the second player can't see the first player's turn and can't repeat their answers. A
   one-player team plays both turns. It's for bragging rights and doesn't change who won.
 - A vague answer gets one "can you be more specific?" retry with no strike.

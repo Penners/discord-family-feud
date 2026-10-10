@@ -42,7 +42,7 @@ export const DEFAULT_TIMINGS: Timings = {
   pauseMs: 2_500,
   fastMoneyPickMs: 30_000,
   fastMoneyIntroMs: 6_000,
-  fastMoneyTurnMs: [20_000, 25_000],
+  fastMoneyTurnMs: [40_000, 50_000],
   fastMoneyRevealMs: 10_000,
 };
 
