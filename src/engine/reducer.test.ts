@@ -80,6 +80,46 @@ const teamAClearsBoard = () => {
   expect(round().result).toMatchObject({ winner: "a", via: "cleared" });
 };
 
+const fm = () => state.fastMoney!;
+
+/** Lets the current Fast Money stage's clock run out. */
+const fmExpire = () => {
+  expect(fm().deadline).not.toBeNull();
+  now = fm().deadline!;
+  send({ type: "tick" });
+};
+
+let guesses = 0;
+
+/** Submits a Fast Money answer, worded differently every time, and delivers the grader's verdict for it. */
+const fmAnswer = (playerId: string, matchIndex: number | null, text = `guess ${++guesses}`) => {
+  const { effects } = send({ type: "answer", playerId, text });
+  expect(effects).toHaveLength(1);
+  send({ type: "graded", requestId: effects[0].requestId, matchIndex });
+};
+
+/** Team A wins the game in three rounds, which takes them into Fast Money. */
+const teamAWinsGame = (teamA = ["a1", "a2"], teamB = ["b1", "b2"]) => {
+  setup(teamA, teamB);
+  send({ type: "start", playerId: "a1" });
+  for (let r = 0; r < 3; r++) {
+    teamAClearsBoard();
+    expire();
+  }
+  expect(state.phase).toBe("fastMoney");
+  // With two or more on the team, the first two step up and confirm.
+  if (fm().stage === "pick") {
+    send({ type: "volunteer", playerId: teamA[0], play: true });
+    send({ type: "volunteer", playerId: teamA[1], play: true });
+    send({ type: "confirmPlayers", playerId: teamA[0] });
+  }
+};
+
+/** Runs Fast Money to the end with nobody answering. */
+const sitOutFastMoney = () => {
+  for (let stage = 0; stage < 6; stage++) fmExpire();
+};
+
 beforeEach(() => {
   state = initialState();
   now = 1_000_000;
@@ -368,8 +408,8 @@ describe("game structure", () => {
     teamAClearsBoard();
     expect(state.teams.a.score).toBe(400);
     expire();
-    expect(state).toMatchObject({ phase: "finished", winner: "a" });
-    expect(picked.map((spec) => spec.multiplier)).toEqual([1, 1, 2]);
+    expect(state).toMatchObject({ phase: "fastMoney", winner: "a" });
+    expect(picked.slice(0, 3).map((spec) => spec.multiplier)).toEqual([1, 1, 2]);
   });
 
   it("rotates who goes to the podium each round", () => {
@@ -401,7 +441,7 @@ describe("game structure", () => {
     answer("b1", 0);
     expect(round().result).toEqual({ winner: "b", awarded: 120, via: "cleared" });
     expire();
-    expect(state).toMatchObject({ phase: "finished", winner: "b" });
+    expect(state).toMatchObject({ phase: "fastMoney", winner: "b" });
   });
 
   it("returns to the lobby with scores cleared when any player plays again", () => {
@@ -411,12 +451,14 @@ describe("game structure", () => {
       teamAClearsBoard();
       expire();
     }
+    expect(rejected({ type: "playAgain", playerId: "b1" })).toMatch(/not over/i);
+    sitOutFastMoney();
     expect(state.phase).toBe("finished");
     expect(rejected({ type: "endGame", playerId: "b1" })).toMatch(/no game/i);
     send({ type: "playAgain", playerId: "b1" });
     expect(state).toMatchObject({ phase: "lobby", round: null, winner: null });
     expect(state.teams.a.score).toBe(0);
-    expect(state.usedQuestionIds).toHaveLength(3);
+    expect(state.usedQuestionIds).toHaveLength(8);
   });
 
   it("lets any player end a game in progress, clearing scores and any answer being judged", () => {
@@ -467,6 +509,207 @@ describe("grader failure", () => {
     answer("a1", 0);
     send({ type: "gradeFailed", requestId: "stale" });
     expect(state.phase).toBe("playing");
+  });
+});
+
+describe("fast money", () => {
+  it("lets the winning team choose its two players, in the order they step up", () => {
+    setup(["a1", "a2", "a3"], ["b1"]);
+    send({ type: "start", playerId: "a1" });
+    for (let r = 0; r < 3; r++) {
+      teamAClearsBoard();
+      expire();
+    }
+    expect(fm()).toMatchObject({ stage: "pick", volunteers: [] });
+    expect(rejected({ type: "volunteer", playerId: "b1", play: true })).toMatch(/winning team/i);
+    expect(rejected({ type: "confirmPlayers", playerId: "a1" })).toMatch(/two players/i);
+
+    send({ type: "volunteer", playerId: "a3", play: true });
+    send({ type: "volunteer", playerId: "a1", play: true });
+    expect(rejected({ type: "volunteer", playerId: "a2", play: true })).toMatch(/already in/i);
+    send({ type: "volunteer", playerId: "a1", play: false });
+    send({ type: "volunteer", playerId: "a2", play: true });
+    expect(toPublicState(state, "a2").fastMoney).toMatchObject({ volunteers: ["a3", "a2"], isolated: false });
+    expect(rejected({ type: "confirmPlayers", playerId: "b1" })).toMatch(/winning team/i);
+
+    send({ type: "confirmPlayers", playerId: "a1" });
+    expect(fm()).toMatchObject({ stage: "intro", playerIds: ["a3", "a2"] });
+    expect(rejected({ type: "volunteer", playerId: "a1", play: true })).toMatch(/already been chosen/i);
+  });
+
+  it("fills empty seats from the team when nobody confirms in time", () => {
+    setup(["a1", "a2", "a3"], ["b1"]);
+    send({ type: "start", playerId: "a1" });
+    for (let r = 0; r < 3; r++) {
+      teamAClearsBoard();
+      expire();
+    }
+    send({ type: "volunteer", playerId: "a2", play: true });
+    fmExpire();
+    expect(fm()).toMatchObject({ stage: "intro", playerIds: ["a2", "a1"] });
+  });
+
+  it("puts the chosen players on five fresh questions", () => {
+    teamAWinsGame();
+    expect(fm()).toMatchObject({ team: "a", playerIds: ["a1", "a2"], stage: "intro", turn: 0 });
+    expect(fm().questions).toHaveLength(5);
+    expect(picked.slice(-5).every((spec) => spec.kind === "fastMoney")).toBe(true);
+    expect(new Set(state.usedQuestionIds).size).toBe(8);
+  });
+
+  it("skips Fast Money when the game is drawn", () => {
+    setup(["a1"], ["b1"]);
+    send({ type: "start", playerId: "a1" });
+    // Four void rounds, then three void sudden deaths, with the scores level at zero.
+    for (let r = 0; r < 7; r++) {
+      expire();
+      expire();
+      expire();
+      expire();
+    }
+    expect(state).toMatchObject({ phase: "finished", winner: null, fastMoney: null });
+  });
+
+  it("plays both turns, scores each answer by its survey points and finishes the game", () => {
+    teamAWinsGame();
+    fmExpire();
+    expect(fm()).toMatchObject({ stage: "turn", turn: 0, questionIndex: 0 });
+    expect(rejected({ type: "answer", playerId: "a2", text: "me first" })).toMatch(/not your turn/i);
+    for (let q = 0; q < 5; q++) fmAnswer("a1", 0);
+    expect(fm().stage).toBe("reveal");
+    expect(fm().answers[0].map((slot) => slot?.points)).toEqual([40, 40, 40, 40, 40]);
+
+    fmExpire(); // reveal
+    expect(fm()).toMatchObject({ stage: "intro", turn: 1 });
+    fmExpire(); // intro
+    for (let q = 0; q < 5; q++) fmAnswer("a2", 1);
+    fmExpire(); // reveal
+    expect(state.phase).toBe("finished");
+    expect(fm().stage).toBe("done");
+    expect(toPublicState(state).fastMoney).toMatchObject({ total: 325, target: 200 });
+  });
+
+  it("makes the second player try again when they repeat the first player's answer", () => {
+    teamAWinsGame();
+    fmExpire();
+    for (let q = 0; q < 5; q++) fmAnswer("a1", 0);
+    fmExpire();
+    fmExpire();
+    fmAnswer("a2", 0);
+    expect(fm()).toMatchObject({ questionIndex: 0, retry: true, pending: null });
+    expect(fm().answers[1][0]).toBeNull();
+    fmAnswer("a2", 2);
+    expect(fm()).toMatchObject({ questionIndex: 1, retry: false });
+    expect(fm().answers[1][0]).toMatchObject({ answerIndex: 2, points: 15 });
+  });
+
+  it("rejects a word-for-word repeat without asking the judge, even if the first answer scored nothing", () => {
+    teamAWinsGame();
+    fmExpire();
+    for (let q = 0; q < 5; q++) fmAnswer("a1", null, "wrong");
+    fmExpire();
+    fmExpire();
+    const deadline = fm().deadline;
+    const { effects } = send({ type: "answer", playerId: "a2", text: "  WRONG " });
+    expect(effects).toHaveLength(0);
+    expect(fm()).toMatchObject({ questionIndex: 0, retry: true, pending: null, deadline });
+  });
+
+  it("does not treat two different misses on the same question as a repeat", () => {
+    teamAWinsGame();
+    fmExpire();
+    for (let q = 0; q < 5; q++) fmAnswer("a1", null);
+    fmExpire();
+    fmExpire();
+    const { effects } = send({ type: "answer", playerId: "a2", text: "also wrong" });
+    send({ type: "graded", requestId: effects[0].requestId, matchIndex: null });
+    expect(fm()).toMatchObject({ questionIndex: 1, retry: false });
+  });
+
+  it("stops the clock while an answer is judged and resumes it afterwards", () => {
+    teamAWinsGame();
+    fmExpire();
+    const turnEnds = fm().deadline!;
+    now += 5_000;
+    const { effects } = send({ type: "answer", playerId: "a1", text: "something" });
+    expect(fm()).toMatchObject({ deadline: null, remainingMs: turnEnds - now });
+    now += 3_000; // a slow judge
+    send({ type: "tick" });
+    expect(fm().stage).toBe("turn");
+    send({ type: "graded", requestId: effects[0].requestId, matchIndex: 3 });
+    expect(fm().deadline).toBe(turnEnds + 3_000);
+    expect(fm().questionIndex).toBe(1);
+  });
+
+  it("scores nothing for a pass or for questions not reached in time", () => {
+    teamAWinsGame();
+    fmExpire();
+    fmAnswer("a1", 1);
+    send({ type: "answer", playerId: "a1", text: "   " });
+    expect(fm().questionIndex).toBe(2);
+    fmExpire();
+    expect(fm().stage).toBe("reveal");
+    expect(fm().answers[0].map((slot) => slot?.points)).toEqual([25, 0, 0, 0, 0]);
+    expect(fm().answers[0][1]).toEqual({ text: "", answerIndex: null, points: 0 });
+  });
+
+  it("keeps the second player in the dark until their own turn has been revealed", () => {
+    teamAWinsGame();
+    fmExpire();
+    send({ type: "answer", playerId: "a1", text: "a secret answer" });
+    const others = toPublicState(state, "b1").fastMoney!;
+    expect(others.isolated).toBe(false);
+    expect(others.rows[0].question).toBe(fm().questions[0].text);
+    expect(others.rows[1].question).toBeNull();
+    const second = toPublicState(state, "a2");
+    expect(second.fastMoney).toMatchObject({ isolated: true, total: null });
+    expect(JSON.stringify(second)).not.toContain(fm().questions[0].text);
+
+    send({ type: "graded", requestId: String(state.seq), matchIndex: 0 });
+    // Points stay hidden from everyone until the turn is over.
+    expect(toPublicState(state, "b1").fastMoney!.rows[0].answers[0]).toEqual({ text: "a secret answer", points: null });
+    expect(JSON.stringify(toPublicState(state, "a2"))).not.toContain("a secret answer");
+    fmExpire(); // turn one runs out
+    expect(toPublicState(state, "b1").fastMoney).toMatchObject({ total: 40 });
+    expect(toPublicState(state, "a2").fastMoney!.rows[0].answers[0]).toBeNull();
+
+    fmExpire(); // reveal
+    fmExpire(); // intro for turn two
+    fmAnswer("a2", 1, "my answer");
+    const mine = toPublicState(state, "a2").fastMoney!;
+    expect(mine.rows[0].answers).toEqual([null, { text: "my answer", points: null }]);
+    fmExpire(); // turn two runs out
+    expect(toPublicState(state, "a2").fastMoney).toMatchObject({ isolated: false, total: 65 });
+  });
+
+  it("lets a one-player team play both turns", () => {
+    teamAWinsGame(["a1"], ["b1"]);
+    expect(fm().playerIds).toEqual(["a1", "a1"]);
+    expect(toPublicState(state, "a1").fastMoney!.isolated).toBe(false);
+    fmExpire();
+    for (let q = 0; q < 5; q++) fmAnswer("a1", 0);
+    fmExpire();
+    fmExpire();
+    fmAnswer("a1", 0);
+    expect(fm().retry).toBe(true);
+    fmAnswer("a1", 1);
+    expect(fm().questionIndex).toBe(1);
+  });
+
+  it("can be ended early, and is cancelled if the judge stops working", () => {
+    teamAWinsGame();
+    fmExpire();
+    const { effects } = send({ type: "answer", playerId: "a1", text: "anything" });
+    send({ type: "gradeFailed", requestId: effects[0].requestId });
+    expect(state).toMatchObject({ phase: "lobby", fastMoney: null, judgeDown: true });
+
+    send({ type: "start", playerId: "a1" });
+    for (let r = 0; r < 3; r++) {
+      teamAClearsBoard();
+      expire();
+    }
+    send({ type: "endGame", playerId: "b1" });
+    expect(state).toMatchObject({ phase: "lobby", fastMoney: null, judgeDown: false });
   });
 });
 

@@ -8,6 +8,7 @@ import type {
 } from "../shared/types";
 import {
   DEFAULT_TIMINGS,
+  FAST_MONEY_QUESTIONS,
   MAX_DEAD_BUZZES,
   MAX_FACEOFF_PAIRS,
   MAX_STRIKES,
@@ -16,7 +17,7 @@ import {
   SUDDEN_DEATH_MULTIPLIER,
   TARGET_SCORE,
 } from "./state";
-import type { GameState, QuestionSpec, RoundState, Timings } from "./state";
+import type { FastMoneyState, GameState, QuestionSpec, RoundState, Timings } from "./state";
 
 export type GameEvent =
   /** A socket opened. `name` is set when the platform already knows it (Discord). */
@@ -30,6 +31,11 @@ export type GameEvent =
   | { type: "choose"; playerId: string; play: boolean }
   | { type: "playAgain"; playerId: string }
   | { type: "endGame"; playerId: string }
+  /** A member of the winning team offers to play Fast Money, or steps back down. */
+  | { type: "volunteer"; playerId: string; play: boolean }
+  | { type: "confirmPlayers"; playerId: string }
+  /** Development only: the player's team wins the game immediately. The room refuses it in production. */
+  | { type: "devWin"; playerId: string }
   /** The room's alarm fired. */
   | { type: "tick" }
   /** The grader finished. `matchIndex` is the board slot matched, or null. */
@@ -56,6 +62,32 @@ export interface ReduceResult {
   effects: Effect[];
   /** Set when the event was rejected; the state is returned unchanged. */
   error?: string;
+}
+
+/** The grading request for an answer that is still waiting on its verdict, if there is one. */
+export function pendingGrade(state: GameState): Effect | null {
+  const round = state.round;
+  if (state.phase === "playing" && round?.pending) {
+    return {
+      type: "grade",
+      requestId: round.pending.requestId,
+      question: round.question.text,
+      answers: round.question.answers.map((a, i) => ({ text: a.text, accepts: a.accepts, revealed: round.revealed[i] })),
+      guess: round.pending.text,
+    };
+  }
+  const fm = state.fastMoney;
+  if (state.phase === "fastMoney" && fm?.pending) {
+    const question = fm.questions[fm.questionIndex];
+    return {
+      type: "grade",
+      requestId: fm.pending.requestId,
+      question: question.text,
+      answers: question.answers.map((a) => ({ text: a.text, accepts: a.accepts, revealed: false })),
+      guess: fm.pending.text,
+    };
+  }
+  return null;
 }
 
 class Rejected extends Error {}
@@ -124,6 +156,7 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
   const backToLobby = () => {
     s.phase = "lobby";
     s.round = null;
+    s.fastMoney = null;
     s.winner = null;
     s.roundIndex = 0;
     s.players = s.players.filter((p) => p.connected);
@@ -134,15 +167,14 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
 
   const startRound = () => {
     const normal = s.roundIndex < ROUND_MULTIPLIERS.length;
-    const spec: QuestionSpec = normal
-      ? { kind: "normal", multiplier: ROUND_MULTIPLIERS[s.roundIndex] }
-      : { kind: "suddenDeath", multiplier: SUDDEN_DEATH_MULTIPLIER };
+    const kind = normal ? "normal" : "suddenDeath";
+    const spec: QuestionSpec = { kind, multiplier: normal ? ROUND_MULTIPLIERS[s.roundIndex] : SUDDEN_DEATH_MULTIPLIER };
     const picked = env.pickQuestion(spec, s.usedQuestionIds);
     s.usedQuestionIds.push(picked.id);
     // Sudden death is played on the top answer only.
     const answers = normal ? picked.answers : picked.answers.slice(0, 1);
     const round: RoundState = {
-      kind: spec.kind,
+      kind,
       multiplier: spec.multiplier,
       question: { ...picked, answers },
       revealed: answers.map(() => false),
@@ -171,9 +203,144 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
   };
 
   const finish = (winner: TeamId | null) => {
-    s.phase = "finished";
     s.winner = winner;
     if (s.round) s.round.deadline = null;
+    // The winners play Fast Money; a drawn game just ends.
+    if (winner) startFastMoney(winner);
+    else s.phase = "finished";
+  };
+
+  // ---- fast money --------------------------------------------------------
+
+  const startFastMoney = (team: TeamId) => {
+    const pool = available(team);
+    const questions: Question[] = [];
+    for (let i = 0; i < FAST_MONEY_QUESTIONS; i++) {
+      const picked = env.pickQuestion({ kind: "fastMoney", multiplier: 1 }, s.usedQuestionIds);
+      s.usedQuestionIds.push(picked.id);
+      questions.push(picked);
+    }
+    const blank = () => questions.map(() => null);
+    s.phase = "fastMoney";
+    s.fastMoney = {
+      team,
+      // A one-player team plays both turns, so there is nothing to choose.
+      playerIds: [pool[0].id, (pool[1] ?? pool[0]).id],
+      volunteers: [],
+      questions,
+      stage: pool.length > 1 ? "pick" : "intro",
+      turn: 0,
+      questionIndex: 0,
+      answers: [blank(), blank()],
+      deadline: now + (pool.length > 1 ? t.fastMoneyPickMs : t.fastMoneyIntroMs),
+      remainingMs: null,
+      pending: null,
+      retry: false,
+    };
+  };
+
+  const requireFastMoney = (): FastMoneyState =>
+    s.phase === "fastMoney" && s.fastMoney ? s.fastMoney : reject("Fast Money is not being played");
+
+  /** Volunteers play in the order they stepped up; empty seats go to the next teammates in line. */
+  const lockInFastMoneyPlayers = (fm: FastMoneyState) => {
+    const pool = available(fm.team).map((p) => p.id);
+    const chosen = [...fm.volunteers, ...pool.filter((id) => !fm.volunteers.includes(id))];
+    fm.playerIds = [chosen[0], chosen[1] ?? chosen[0]];
+    fm.stage = "intro";
+    fm.deadline = now + t.fastMoneyIntroMs;
+  };
+
+  const endFastMoneyTurn = (fm: FastMoneyState) => {
+    const answers = fm.answers[fm.turn];
+    // Anything not reached before the clock ran out scores nothing.
+    for (let i = 0; i < answers.length; i++) answers[i] ??= { text: "", answerIndex: null, points: 0 };
+    fm.stage = "reveal";
+    fm.pending = null;
+    fm.retry = false;
+    fm.remainingMs = null;
+    fm.deadline = now + t.fastMoneyRevealMs;
+  };
+
+  /** Records the answer to the current question and moves on, restarting the clock where it stopped. */
+  const recordFastMoneyAnswer = (fm: FastMoneyState, text: string, answerIndex: number | null, remainingMs: number) => {
+    const question = fm.questions[fm.questionIndex];
+    fm.answers[fm.turn][fm.questionIndex] = {
+      text,
+      answerIndex,
+      points: answerIndex === null ? 0 : question.answers[answerIndex].points,
+    };
+    fm.pending = null;
+    fm.retry = false;
+    fm.remainingMs = null;
+    fm.questionIndex++;
+    if (fm.questionIndex >= fm.questions.length) return endFastMoneyTurn(fm);
+    fm.deadline = now + remainingMs;
+  };
+
+  const fastMoneyAnswer = (fm: FastMoneyState, playerId: string, rawText: string) => {
+    if (fm.stage !== "turn" || fm.playerIds[fm.turn] !== playerId) reject("It is not your turn to answer");
+    if (fm.pending) reject("An answer is already being judged");
+    const remainingMs = Math.max(0, (fm.deadline ?? now) - now);
+    const text = rawText.replace(/\s+/g, " ").trim();
+    // An empty answer is a pass.
+    if (!text) return recordFastMoneyAnswer(fm, "", null, remainingMs);
+    // Word for word what the first player said: no need to ask the judge, and the clock keeps running.
+    const earlier = fm.turn === 1 ? fm.answers[0][fm.questionIndex]?.text : undefined;
+    if (earlier && earlier.toLowerCase() === text.toLowerCase()) {
+      fm.retry = true;
+      return;
+    }
+    const requestId = String(++s.seq);
+    fm.pending = { requestId, text };
+    // The clock stops while the answer is judged, so a slow judge costs the player nothing.
+    fm.remainingMs = remainingMs;
+    fm.deadline = null;
+    effects.push(pendingGrade(s)!);
+  };
+
+  const fastMoneyGraded = (fm: FastMoneyState, matchIndex: number | null) => {
+    const question = fm.questions[fm.questionIndex];
+    const valid = matchIndex !== null && Number.isInteger(matchIndex) && matchIndex >= 0 && matchIndex < question.answers.length;
+    const index = valid ? matchIndex : null;
+    const remainingMs = fm.remainingMs ?? 0;
+    // The second player may not repeat the first player's answer: they must try again.
+    if (fm.turn === 1 && index !== null && fm.answers[0][fm.questionIndex]?.answerIndex === index) {
+      fm.pending = null;
+      fm.retry = true;
+      fm.remainingMs = null;
+      fm.deadline = now + remainingMs;
+      return;
+    }
+    recordFastMoneyAnswer(fm, fm.pending!.text, index, remainingMs);
+  };
+
+  const fastMoneyTick = (fm: FastMoneyState) => {
+    if (fm.deadline === null || now < fm.deadline) return;
+    switch (fm.stage) {
+      case "pick":
+        // Nobody confirmed in time: go with whoever volunteered.
+        return lockInFastMoneyPlayers(fm);
+      case "intro":
+        fm.stage = "turn";
+        fm.questionIndex = 0;
+        fm.deadline = now + t.fastMoneyTurnMs[fm.turn];
+        return;
+      case "turn":
+        return endFastMoneyTurn(fm);
+      case "reveal":
+        if (fm.turn === 0) {
+          fm.turn = 1;
+          fm.stage = "intro";
+          fm.questionIndex = 0;
+          fm.deadline = now + t.fastMoneyIntroMs;
+          return;
+        }
+        fm.stage = "done";
+        fm.deadline = null;
+        s.phase = "finished";
+        return;
+    }
   };
 
   const leader = (): TeamId | null => {
@@ -373,6 +540,7 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
       }
 
       case "answer": {
+        if (s.phase === "fastMoney") return fastMoneyAnswer(requireFastMoney(), event.playerId, event.text);
         const round = requireRound();
         const answering = round.stage === "faceoffAnswer" || round.stage === "play" || round.stage === "steal";
         if (!answering || round.activePlayerId !== event.playerId) reject("It is not your turn to answer");
@@ -393,6 +561,8 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
       }
 
       case "graded": {
+        const fm = s.fastMoney;
+        if (s.phase === "fastMoney" && fm?.pending?.requestId === event.requestId) return fastMoneyGraded(fm, event.matchIndex);
         const round = s.round;
         // A late or repeated verdict for an answer that is no longer pending.
         if (s.phase !== "playing" || !round?.pending || round.pending.requestId !== event.requestId) return;
@@ -406,8 +576,8 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
       }
 
       case "gradeFailed": {
-        const round = s.round;
-        if (s.phase !== "playing" || !round?.pending || round.pending.requestId !== event.requestId) return;
+        const pending = s.phase === "playing" ? s.round?.pending : s.phase === "fastMoney" ? s.fastMoney?.pending : null;
+        if (pending?.requestId !== event.requestId) return;
         // Without a judge nobody can score fairly, so the game is called off rather than guessed at.
         backToLobby();
         s.judgeDown = true;
@@ -421,6 +591,38 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
         return;
       }
 
+      case "volunteer": {
+        const fm = requireFastMoney();
+        if (fm.stage !== "pick") reject("The Fast Money players have already been chosen");
+        if (player(event.playerId)?.team !== fm.team) reject("Only the winning team plays Fast Money");
+        const at = fm.volunteers.indexOf(event.playerId);
+        if (!event.play) {
+          if (at >= 0) fm.volunteers.splice(at, 1);
+          return;
+        }
+        if (at >= 0) return;
+        if (fm.volunteers.length >= 2) reject("Two players are already in");
+        fm.volunteers.push(event.playerId);
+        return;
+      }
+
+      case "confirmPlayers": {
+        const fm = requireFastMoney();
+        if (fm.stage !== "pick") reject("The Fast Money players have already been chosen");
+        if (player(event.playerId)?.team !== fm.team) reject("Only the winning team can confirm");
+        if (fm.volunteers.length < Math.min(2, available(fm.team).length)) reject("Two players need to step up first");
+        lockInFastMoneyPlayers(fm);
+        return;
+      }
+
+      case "devWin": {
+        requireRound();
+        const team = player(event.playerId)?.team ?? reject("Join a team first");
+        s.teams[team].score = Math.max(s.teams[team].score, TARGET_SCORE);
+        finish(team);
+        return;
+      }
+
       case "playAgain": {
         if (s.phase !== "finished") reject("The game is not over");
         if (!player(event.playerId)) reject("Join the game first");
@@ -430,13 +632,14 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
 
       // Any player may call a game off, for example when people have to leave.
       case "endGame": {
-        if (s.phase !== "playing") reject("There is no game in progress");
+        if (s.phase !== "playing" && s.phase !== "fastMoney") reject("There is no game in progress");
         if (!player(event.playerId)) reject("Join the game first");
         backToLobby();
         return;
       }
 
       case "tick": {
+        if (s.phase === "fastMoney" && s.fastMoney) return fastMoneyTick(s.fastMoney);
         const round = s.round;
         if (s.phase !== "playing" || !round || round.deadline === null || now < round.deadline) return;
         // Nobody is here: stop the clock until someone reconnects.

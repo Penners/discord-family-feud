@@ -8,6 +8,8 @@ const fits = (question: Question, spec: QuestionSpec): boolean => {
   const count = question.answers.length;
   // Sudden death is decided on the top answer, so it needs a clear favourite.
   if (spec.kind === "suddenDeath") return question.answers[0].points >= 30;
+  // Fast Money is scored on single answers, so each question needs one worth chasing.
+  if (spec.kind === "fastMoney") return question.answers[0].points >= 25;
   // Bigger boards for single-value rounds, smaller ones once points multiply.
   return spec.multiplier === 1 ? count >= 6 : count <= 6;
 };

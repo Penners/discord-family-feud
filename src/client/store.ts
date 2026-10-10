@@ -70,3 +70,6 @@ export const useStore = create<Store>((set) => ({
 }));
 
 export const send = (message: ClientMessage) => useStore.getState().send(message);
+
+// Lets test scripts and the browser console send messages during development.
+if (import.meta.env.DEV) (window as unknown as { __ffSend: typeof send }).__ffSend = send;

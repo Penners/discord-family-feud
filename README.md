@@ -167,6 +167,10 @@ Four rounds (single, single, double, triple). The first team to 300 wins; if nob
 there, a sudden-death round is decided on the top answer. Face-off, play or pass, three
 strikes and one steal attempt follow the current US show.
 
+- The winning team plays Fast Money: two players answer the same five questions against the
+  clock (20 seconds, then 25) and need 200 points between them. The team chooses who plays;
+  the second player can't see the first player's turn and can't repeat their answers. A
+  one-player team plays both turns. It's for bragging rights and doesn't change who won.
 - A vague answer gets one "can you be more specific?" retry with no strike.
 - Any player can start a game, start a new one, or end the game in progress.
 - If the judge fails twice on one answer, the game is cancelled and the lobby says why.

@@ -355,7 +355,7 @@ function Finished() {
 }
 
 /** Ends the game for everyone. Asks first, since one stray click would wipe the scores. */
-function EndGameButton() {
+export function EndGameButton() {
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     if (!confirming) return;
