@@ -210,7 +210,8 @@ cloudflared tunnel --url http://localhost:5173
 - `npm run eval` scores the grader against the labelled answers in `evals/grading-cases.json`.
   It needs the dev server running and makes one model call per case. Useful options:
   `--limit 40` for a quick sample, `--grader jev` to score another grader without changing
-  config, and `--reveal` to test with half the board already showing.
+  config, `--reveal` to test with half the board already showing, and `--tag british` to run
+  only the British-English cases.
 - `npm run deploy` builds and deploys.
 
 ### Layout

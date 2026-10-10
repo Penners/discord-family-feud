@@ -26,6 +26,8 @@ for (const name of ["grader", "model", "threshold"]) if (option(`--${name}`)) qu
 const read = (file) => JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
 const questions = new Map(read("src/worker/questions.json").map((q) => [q.id, q]));
 let cases = read("evals/grading-cases.json");
+// --tag british runs only the cases carrying that tag.
+if (option("--tag")) cases = cases.filter((c) => c.tag === option("--tag"));
 if (limit < cases.length) {
   // Spread the sample across the file rather than taking the first few questions.
   const step = cases.length / limit;
