@@ -1,0 +1,30 @@
+name: Test
+
+# Type-checks and runs the rules tests on pull requests and on pushes to any
+# branch except master, where the Deploy workflow runs the same checks before
+# it deploys. Uses no secrets, so it is safe to run on pull requests from forks.
+on:
+  pull_request:
+  push:
+    branches-ignore: [master]
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request replaces the run in progress.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
