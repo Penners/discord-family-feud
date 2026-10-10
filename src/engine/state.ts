@@ -33,10 +33,10 @@ export interface Timings {
 
 export const DEFAULT_TIMINGS: Timings = {
   introMs: 4_000,
-  buzzMs: 20_000,
-  faceoffAnswerMs: 10_000,
-  decideMs: 15_000,
-  playMs: 20_000,
+  buzzMs: 30_000,
+  faceoffAnswerMs: 30_000,
+  decideMs: 30_000,
+  playMs: 30_000,
   stealMs: 30_000,
   roundEndMs: 9_000,
   pauseMs: 2_500,
