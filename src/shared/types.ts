@@ -85,13 +85,48 @@ export interface PublicRound {
   result: RoundResult | null;
 }
 
+/** "pick" is the winning team choosing its two players; it is skipped for a one-player team. */
+export type FastMoneyStage = "pick" | "intro" | "turn" | "reveal" | "done";
+
+/** One Fast Money answer as clients see it. `points` is null until that turn's answers are revealed. */
+export interface PublicFastMoneySlot {
+  text: string;
+  points: number | null;
+}
+
+export interface PublicFastMoney {
+  team: TeamId;
+  /** Who plays the first and second turn. The same player twice on a one-player team. */
+  playerIds: [string, string];
+  /** Who has put themselves forward so far, in the order they will play. */
+  volunteers: string[];
+  stage: FastMoneyStage;
+  turn: 0 | 1;
+  questionIndex: number;
+  deadline: number | null;
+  /** Time left on the turn clock while it is stopped for an answer being judged. */
+  remainingMs: number | null;
+  judging: boolean;
+  /** The second player repeated the first player's answer and must give another. */
+  retry: boolean;
+  /** This viewer plays second and may not see the first player's turn. */
+  isolated: boolean;
+  /** One row per question. Questions and answers are null while hidden from this viewer. */
+  rows: { question: string | null; answers: [PublicFastMoneySlot | null, PublicFastMoneySlot | null] }[];
+  /** Points revealed so far; null for the isolated player. */
+  total: number | null;
+  target: number;
+}
+
 export interface PublicState {
-  phase: "lobby" | "playing" | "finished";
+  phase: "lobby" | "playing" | "fastMoney" | "finished";
   players: Player[];
   teams: Record<TeamId, Team>;
   targetScore: number;
   roundIndex: number;
   round: PublicRound | null;
+  /** The winning team's bonus round. Stays set once finished so the result can be shown. */
+  fastMoney: PublicFastMoney | null;
   winner: TeamId | null;
   /** The last game was cancelled because answers could not be judged. */
   judgeDown: boolean;

@@ -15,11 +15,16 @@ export const ClientMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("choose"), play: z.boolean() }),
   z.object({ type: z.literal("playAgain") }),
   z.object({ type: z.literal("endGame") }),
+  z.object({ type: z.literal("volunteer"), play: z.boolean() }),
+  z.object({ type: z.literal("confirmPlayers") }),
+  /** Development only: the sender's team wins on the spot, to reach Fast Money without a whole game. */
+  z.object({ type: z.literal("devWin") }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
 export type ServerMessage =
-  | { type: "hello"; userId: string; presetName: string | null }
+  /** `dev` is true when the server has its development features on (DEV_IDENTITIES). */
+  | { type: "hello"; userId: string; presetName: string | null; dev: boolean }
   | { type: "state"; state: PublicState; serverNow: number }
   | { type: "error"; message: string };
 

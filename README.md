@@ -167,6 +167,10 @@ Four rounds (single, single, double, triple). The first team to 300 wins; if nob
 there, a sudden-death round is decided on the top answer. Face-off, play or pass, three
 strikes and one steal attempt follow the current US show.
 
+- The winning team plays Fast Money: two players answer the same five questions against the
+  clock (a minute each, since answers are typed) and need 200 points between them. The team chooses who plays;
+  the second player can't see the first player's turn and can't repeat their answers. A
+  one-player team plays both turns. It's for bragging rights and doesn't change who won.
 - A vague answer gets one "can you be more specific?" retry with no strike.
 - Any player can start a game, start a new one, or end the game in progress.
 - If the judge fails twice on one answer, the game is cancelled and the lobby says why.
@@ -206,7 +210,8 @@ cloudflared tunnel --url http://localhost:5173
 - `npm run eval` scores the grader against the labelled answers in `evals/grading-cases.json`.
   It needs the dev server running and makes one model call per case. Useful options:
   `--limit 40` for a quick sample, `--grader jev` to score another grader without changing
-  config, and `--reveal` to test with half the board already showing.
+  config, `--reveal` to test with half the board already showing, and `--tag british` to run
+  only the British-English cases.
 - `npm run deploy` builds and deploys.
 
 ### Layout

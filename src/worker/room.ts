@@ -1,8 +1,8 @@
 import { Server } from "partyserver";
 import type { Connection, ConnectionContext, WSMessage } from "partyserver";
-import { reduce } from "../engine/reducer";
+import { pendingGrade, reduce } from "../engine/reducer";
 import type { Effect, GameEvent } from "../engine/reducer";
-import { initialState, toPublicState } from "../engine/state";
+import { initialState, nextDeadline, toPublicState } from "../engine/state";
 import type { GameState } from "../engine/state";
 import { ClientMessage } from "../shared/protocol";
 import type { ServerMessage } from "../shared/protocol";
@@ -41,16 +41,8 @@ export class GameRoom extends Server<Env> {
     }
 
     // An answer was mid-grading when the room went away: judge it again.
-    const round = this.#state.round;
-    if (this.#state.phase === "playing" && round?.pending) {
-      this.runEffect({
-        type: "grade",
-        requestId: round.pending.requestId,
-        question: round.question.text,
-        answers: round.question.answers.map((a, i) => ({ text: a.text, accepts: a.accepts, revealed: round.revealed[i] })),
-        guess: round.pending.text,
-      });
-    }
+    const pending = pendingGrade(this.#state);
+    if (pending) this.runEffect(pending);
     await this.syncAlarm();
   }
 
@@ -63,7 +55,12 @@ export class GameRoom extends Server<Env> {
     const identity = readIdentity(ctx.request);
     if (!identity) return connection.close(4401, "Unauthorized");
     connection.setState({ userId: identity.userId });
-    this.send(connection, { type: "hello", userId: identity.userId, presetName: identity.name ?? null });
+    this.send(connection, {
+      type: "hello",
+      userId: identity.userId,
+      presetName: identity.name ?? null,
+      dev: this.env.DEV_IDENTITIES === "true",
+    });
     this.dispatch({
       type: "connect",
       playerId: identity.userId,
@@ -80,6 +77,9 @@ export class GameRoom extends Server<Env> {
       parsed = ClientMessage.parse(JSON.parse(message));
     } catch {
       return this.send(connection, { type: "error", message: "Unrecognised message" });
+    }
+    if (parsed.type === "devWin" && this.env.DEV_IDENTITIES !== "true") {
+      return this.send(connection, { type: "error", message: "Not available" });
     }
     const error = this.dispatch({ ...parsed, playerId: userId });
     if (error) this.send(connection, { type: "error", message: error });
@@ -152,14 +152,17 @@ export class GameRoom extends Server<Env> {
   }
 
   private async syncAlarm() {
-    const deadline = this.#state.phase === "playing" ? (this.#state.round?.deadline ?? null) : null;
+    const deadline = nextDeadline(this.#state);
     if (deadline === null) await this.ctx.storage.deleteAlarm();
     else await this.ctx.storage.setAlarm(Math.max(deadline, Date.now() + 1));
   }
 
+  /** Each connection gets its own view, because Fast Money hides one player's turn from the other. */
   private broadcastState() {
-    const message: ServerMessage = { type: "state", state: toPublicState(this.#state), serverNow: Date.now() };
-    this.broadcast(JSON.stringify(message));
+    const serverNow = Date.now();
+    for (const connection of this.getConnections<ConnectionData>()) {
+      this.send(connection, { type: "state", state: toPublicState(this.#state, connection.state?.userId), serverNow });
+    }
   }
 
   private send(connection: Connection, message: ServerMessage) {

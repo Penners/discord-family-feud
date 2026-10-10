@@ -10,6 +10,8 @@ interface Store {
   userId: string | null;
   /** Name supplied by the platform (Discord); null means the player types one. */
   presetName: string | null;
+  /** The server has its development features on, so the UI may offer testing shortcuts. */
+  dev: boolean;
   game: PublicState | null;
   /** Server clock minus local clock, so countdowns agree across players. */
   clockOffset: number;
@@ -28,6 +30,7 @@ export const useStore = create<Store>((set) => ({
   connected: false,
   userId: null,
   presetName: null,
+  dev: false,
   game: null,
   clockOffset: 0,
   error: null,
@@ -49,7 +52,7 @@ export const useStore = create<Store>((set) => ({
       const message = JSON.parse(event.data as string) as ServerMessage;
       switch (message.type) {
         case "hello":
-          return set({ userId: message.userId, presetName: message.presetName });
+          return set({ userId: message.userId, presetName: message.presetName, dev: message.dev });
         case "state":
           return set({ game: message.state, clockOffset: message.serverNow - Date.now() });
         case "error":

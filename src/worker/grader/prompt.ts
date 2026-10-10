@@ -7,7 +7,9 @@ export const JUDGING_RULES =
   "separates alternative wordings or gives an example. The words in brackets after a label say in plain English " +
   "what the group covers. Decide whether the contestant's answer would have been counted in one of the groups. " +
   "Be generous, as the show's judges are: synonyms, slang, misspellings and specific examples of a general " +
-  "answer all count, and so does the general thing when the label is a specific example. Only treat an answer " +
+  "answer all count, and so does the general thing when the label is a specific example. Contestants may be " +
+  "British: British words and slang count for the American equivalent (biscuits for cookies, nappy for " +
+  "diaper). Only treat an answer " +
   "as too vague if it could equally belong to two or more groups.";
 
 /** One board answer as the grader sees it: the label, plus its plain-English note if it has one. */

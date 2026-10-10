@@ -48,7 +48,9 @@ jobs:
         run: |
           grader=clef
           if [ -n "$JEV_KEY" ]; then grader=jev; fi
-          npx wrangler deploy --name "$WORKER_NAME" --var "GRADER:$grader" | tee deploy.log
+          # DEV_IDENTITIES turns on the testing features: several seats in one browser
+          # (?as=2), the "Dev: win now" shortcut and the open /api/dev/grade endpoint.
+          npx wrangler deploy --name "$WORKER_NAME" --var "GRADER:$grader" --var "DEV_IDENTITIES:true" | tee deploy.log
           url=$(grep -o 'https://[^ ]*workers\.dev' deploy.log | head -1)
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "grader=$grader" >> "$GITHUB_OUTPUT"
@@ -73,7 +75,7 @@ jobs:
         run: |
           body="**Preview:** $PREVIEW_URL
 
-          Built from ${{ github.event.pull_request.head.sha }}. Answers are judged by \`$GRADER\`. Web play only; deleted when this pull request closes."
+          Built from ${{ github.event.pull_request.head.sha }}. Answers are judged by \`$GRADER\`. Web play only, with the development features on (add \`&as=2\` to the address to play a second seat in another tab); deleted when this pull request closes."
           gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --edit-last --create-if-none --body "$body"
 
   cleanup:

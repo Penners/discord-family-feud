@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FastMoney } from "./components/FastMoney";
 import { Game } from "./components/Game";
 import { JoinScreen } from "./components/JoinScreen";
 import { Lobby } from "./components/Lobby";
@@ -36,7 +37,15 @@ export function App() {
   return (
     <div className="app">
       <MuteButton />
-      {!me ? <JoinScreen /> : game.phase === "lobby" ? <Lobby game={game} me={me} /> : <Game game={game} me={me} />}
+      {!me ? (
+        <JoinScreen />
+      ) : game.phase === "lobby" ? (
+        <Lobby game={game} me={me} />
+      ) : game.fastMoney ? (
+        <FastMoney game={game} me={me} />
+      ) : (
+        <Game game={game} me={me} />
+      )}
       {!connected && <div className="toast">Reconnecting…</div>}
       {connected && error && <div className="toast toast-error">{error}</div>}
     </div>
