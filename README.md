@@ -225,8 +225,9 @@ cloudflared tunnel --url http://localhost:5173
 | `src/worker/session.ts` | Signed sessions shared by every sign-in method. |
 | `src/client/platform` | Where the app is running (browser tab or Discord). The UI only sees this interface. |
 | `src/client/components` | The lobby and game screens. |
-| `data/megalist.json` | The original scrape of the [source list](#where-the-questions-come-from), kept untouched. |
-| `data/megalist-normalised.json` | The list the game uses: the same questions, with a plain-English `accepts` note on answers whose wording is slang or a joke. |
+| `data/megalist-normalised.json` | The list the game uses: every scraped season, with a plain-English `accepts` note on answers whose wording is slang or a joke. |
+| `data/megalist.json`, `data/season-27.json` | The scrapes as they came from the [source](#where-the-questions-come-from) (seasons 23 and 24, and season 27), kept untouched as a backup. |
+| `scripts/scrape-season.mjs` | Scrapes another season into `data/season-<n>.json`. |
 
 ### How answers are judged
 
@@ -237,6 +238,6 @@ answer is this, is it too vague, or is it not on the board.
 
 ## Where the questions come from
 
-The 1,207 survey questions and their answers were sourced from
-<https://mstiescott.neocities.org/feud24>. The `accepts` notes in
+The 2,039 survey boards and their answers (seasons 23, 24 and 27 of the show) were sourced from
+the season pages at <https://mstiescott.neocities.org/feud27>. The `accepts` notes in
 `data/megalist-normalised.json` were added for this project and are not part of that source.
