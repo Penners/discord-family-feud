@@ -114,16 +114,6 @@ export class GameRoom extends Server<Env> {
     await this.syncAlarm();
   }
 
-  /**
-   * Wipes the room now if nobody is connected. Called by object id from the
-   * maintenance route, for rooms abandoned before they cleaned up after themselves.
-   */
-  async purgeIfEmpty(): Promise<boolean> {
-    if (this.ctx.getWebSockets().length > 0) return false;
-    await this.wipe();
-    return true;
-  }
-
   private handleGone(connection: Connection<ConnectionData>) {
     const userId = connection.state?.userId;
     if (!userId) return;
