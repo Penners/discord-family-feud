@@ -7,12 +7,25 @@ counts for VELCRO KICKS.
 It runs as a single Cloudflare Worker: a React client, one Durable Object per game room,
 and a pluggable answer judge. Cloudflare's free plan is enough to host it.
 
+- [Where the questions come from](#where-the-questions-come-from)
 - [Host your own copy](#host-your-own-copy)
 - [Play on the web](#play-on-the-web)
 - [Add it to Discord](#add-it-to-discord)
 - [Settings](#settings)
 - [Develop locally](#develop-locally)
-- [Where the questions come from](#where-the-questions-come-from)
+
+## Where the questions come from
+
+The 2,039 survey boards and their answers are real surveys from the show, transcribed by
+mstiescott and published at <https://mstiescott.neocities.org>. This game would not exist
+without that work. The seasons used here:
+
+- [Season 23](https://mstiescott.neocities.org/feud23)
+- [Season 24](https://mstiescott.neocities.org/feud24)
+- [Season 27](https://mstiescott.neocities.org/feud27)
+
+The `accepts` notes in `data/megalist-normalised.json` were added for this project and are not
+part of that source.
 
 ## Host your own copy
 
@@ -236,9 +249,3 @@ There is no text matching. The board shows the show's own wording ("VELCRO KICKS
 model also sees that answer's `accepts` note ("shoes, sneakers"), so slang does not cost
 players a correct answer. The model is asked one multiple-choice question: which board
 answer is this, is it too vague, or is it not on the board.
-
-## Where the questions come from
-
-The 2,039 survey boards and their answers (seasons 23, 24 and 27 of the show) were sourced from
-the season pages at <https://mstiescott.neocities.org/feud27>. The `accepts` notes in
-`data/megalist-normalised.json` were added for this project and are not part of that source.
