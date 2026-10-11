@@ -17,6 +17,9 @@ export const IDENTITY_HEADER = "x-ff-identity";
 const STATE_KEY = "state";
 /** A failed grading call is tried once more after this long before the game is called off. */
 const GRADE_RETRY_MS = 750;
+const EXPIRES_KEY = "expiresAt";
+/** A room with nobody connected for this long has everything it saved deleted. */
+const ROOM_TTL_MS = 10 * 60_000;
 
 interface ConnectionData {
   userId: string;
@@ -27,9 +30,12 @@ export class GameRoom extends Server<Env> {
 
   #state: GameState = initialState();
   #grader: Grader | null = null;
+  /** When the room will be wiped; null while anyone is connected. */
+  #expiresAt: number | null = null;
 
   async onStart() {
     this.#state = (await this.ctx.storage.get<GameState>(STATE_KEY)) ?? initialState();
+    this.#expiresAt = (await this.ctx.storage.get<number>(EXPIRES_KEY)) ?? null;
 
     // Sockets can open and close while the room is asleep or restarting, so
     // rebuild presence from the connections that are actually here.
@@ -43,6 +49,10 @@ export class GameRoom extends Server<Env> {
     // An answer was mid-grading when the room went away: judge it again.
     const pending = pendingGrade(this.#state);
     if (pending) this.runEffect(pending);
+
+    // The last socket may have gone without the room hearing about it.
+    if (online.size > 0) this.setExpiry(null);
+    else if (this.#expiresAt === null) this.setExpiry(Date.now() + ROOM_TTL_MS);
     await this.syncAlarm();
   }
 
@@ -55,6 +65,7 @@ export class GameRoom extends Server<Env> {
     const identity = readIdentity(ctx.request);
     if (!identity) return connection.close(4401, "Unauthorized");
     connection.setState({ userId: identity.userId });
+    this.setExpiry(null);
     this.send(connection, {
       type: "hello",
       userId: identity.userId,
@@ -94,9 +105,23 @@ export class GameRoom extends Server<Env> {
   }
 
   async onAlarm() {
+    if (this.#expiresAt !== null && this.#expiresAt <= Date.now()) {
+      if (this.connectionCount() === 0) return this.wipe();
+      this.setExpiry(null);
+    }
     this.dispatch({ type: "tick" });
     // Alarms can fire slightly early; make sure a still-pending deadline is rescheduled.
     await this.syncAlarm();
+  }
+
+  /**
+   * Wipes the room now if nobody is connected. Called by object id from the
+   * maintenance route, for rooms abandoned before they cleaned up after themselves.
+   */
+  async purgeIfEmpty(): Promise<boolean> {
+    if (this.ctx.getWebSockets().length > 0) return false;
+    await this.wipe();
+    return true;
   }
 
   private handleGone(connection: Connection<ConnectionData>) {
@@ -105,6 +130,28 @@ export class GameRoom extends Server<Env> {
     // The same player may still be here in another tab.
     const others = [...this.getConnections<ConnectionData>(userId)].filter((c) => c.id !== connection.id);
     if (others.length === 0) this.dispatch({ type: "disconnect", playerId: userId });
+    if (this.connectionCount(connection.id) === 0) this.setExpiry(Date.now() + ROOM_TTL_MS);
+  }
+
+  private connectionCount(exceptId?: string): number {
+    return [...this.getConnections()].filter((c) => c.id !== exceptId).length;
+  }
+
+  private setExpiry(expiresAt: number | null) {
+    if (expiresAt === this.#expiresAt) return;
+    this.#expiresAt = expiresAt;
+    if (expiresAt === null) void this.ctx.storage.delete(EXPIRES_KEY);
+    else void this.ctx.storage.put(EXPIRES_KEY, expiresAt);
+    void this.syncAlarm();
+  }
+
+  /** Deletes everything the room saved, so the next visitor to this id starts from scratch. */
+  private async wipe() {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    this.#state = initialState();
+    this.#expiresAt = null;
+    console.log("[room] wiped after sitting empty");
   }
 
   /** Applies an event, persists and broadcasts the result. Returns a rejection message, if any. */
@@ -152,9 +199,10 @@ export class GameRoom extends Server<Env> {
   }
 
   private async syncAlarm() {
-    const deadline = nextDeadline(this.#state);
-    if (deadline === null) await this.ctx.storage.deleteAlarm();
-    else await this.ctx.storage.setAlarm(Math.max(deadline, Date.now() + 1));
+    // One alarm serves both the game clock and the empty-room expiry.
+    const times = [nextDeadline(this.#state), this.#expiresAt].filter((time) => time !== null);
+    if (times.length === 0) await this.ctx.storage.deleteAlarm();
+    else await this.ctx.storage.setAlarm(Math.max(Math.min(...times), Date.now() + 1));
   }
 
   /** Each connection gets its own view, because Fast Money hides one player's turn from the other. */

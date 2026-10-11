@@ -91,6 +91,21 @@ async function discordSession(request: Request, env: Env): Promise<Response> {
 }
 
 /**
+ * Maintenance: wipes one room by its Durable Object id (as Cloudflare's API lists
+ * them), unless someone is connected. Needs no password: the ids cannot be
+ * guessed, and one from outside this namespace is rejected.
+ */
+async function purgeRoom(hexId: string, env: Env): Promise<Response> {
+  let id: DurableObjectId;
+  try {
+    id = env.GameRoom.idFromString(hexId);
+  } catch {
+    return json({ error: "Unknown room" }, { status: 404 });
+  }
+  return json({ purged: await env.GameRoom.get(id).purgeIfEmpty() });
+}
+
+/**
  * Development only: judge one answer directly, for the grading eval script.
  * `?grader=`, `?model=` and `?threshold=` override the configured grader for one call.
  */
@@ -117,6 +132,8 @@ export default {
     if (url.pathname === "/api/discord/config") return json({ clientId: env.DISCORD_CLIENT_ID || null });
     if (url.pathname === "/api/discord/token" && request.method === "POST") return discordSession(request, env);
     if (url.pathname === "/api/dev/grade" && request.method === "POST") return devGrade(request, env);
+    const purge = /^\/api\/rooms\/([0-9a-f]{64})\/purge$/.exec(url.pathname);
+    if (purge && request.method === "POST") return purgeRoom(purge[1]!, env);
 
     const routed = await routePartykitRequest(request, env, {
       onBeforeConnect: async (req, lobby) => {
