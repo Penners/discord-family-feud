@@ -206,8 +206,9 @@ cloudflared tunnel --url http://localhost:5173
 
 - `npm test` runs the rules tests.
 - `npm run typecheck` checks types.
-- `npm run questions` rebuilds the question bundle from `data/megalist-normalised.json`. `npm run dev`
-  and `npm run build` do this for you, so an edit to the list takes effect on the next start or deploy.
+- `npm run questions` rebuilds the question bundle (`src/worker/questions.json`, not committed) from
+  `data/megalist-normalised.json`. `npm run dev`, `npm run build` and `npm run typecheck` do this
+  for you, so an edit to the list takes effect on the next start or deploy.
 - `npm run eval` scores the grader against the labelled answers in `evals/grading-cases.json`.
   It needs the dev server running and makes one model call per case. Useful options:
   `--limit 40` for a quick sample, `--grader jev` to score another grader without changing
@@ -226,6 +227,7 @@ cloudflared tunnel --url http://localhost:5173
 | `src/client/platform` | Where the app is running (browser tab or Discord). The UI only sees this interface. |
 | `src/client/components` | The lobby and game screens. |
 | `data/megalist-normalised.json` | The list the game uses: every scraped season, with a plain-English `accepts` note on answers whose wording is slang or a joke. |
+| `src/worker/questions.json` | The bundle the worker deals from. Generated from the list above and not committed. |
 | `scripts/scrape-season.mjs` | Scrapes another season into `data/season-<n>.json`, a staging file (not committed) to annotate and merge into the list. |
 
 ### How answers are judged

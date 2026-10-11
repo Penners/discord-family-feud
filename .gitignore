@@ -14,6 +14,8 @@ dist/
 # generated
 worker-configuration.d.ts
 *.tsbuildinfo
+# built from data/megalist-normalised.json by `npm run questions`
+src/worker/questions.json
 # scraper output, merged into the megalist by hand
 data/season-*.json
 

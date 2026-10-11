@@ -10,7 +10,7 @@
     "deploy": "npm run build && wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "npm run types && tsc -b",
+    "typecheck": "npm run questions && npm run types && tsc -b",
     "questions": "node scripts/build-questions.mjs",
     "types": "wrangler types --strict-vars=false",
     "dev:offline": "npm run questions && npm run types && vite --mode offline",
