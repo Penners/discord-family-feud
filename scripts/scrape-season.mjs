@@ -1,10 +1,11 @@
 // Scrapes one season of survey boards from https://mstiescott.neocities.org
-// into data/season-<n>.json, in the same shape as data/megalist.json.
+// into data/season-<n>.json: a staging file (not committed) to annotate and
+// merge into data/megalist-normalised.json, which it matches in shape.
 //
 //   node scripts/scrape-season.mjs 27                 download and parse
 //   node scripts/scrape-season.mjs 27 --from <dir>    parse pages already saved as <dir>/27-<answers>.html
 //
-// Ids match the original megalist: md5("<season>-<question>") for a question
+// Ids match the megalist: md5("<season>-<question>") for a question
 // and md5("<season>-<question>-<answer>") for each of its answers.
 import crypto from "node:crypto";
 import fs from "node:fs";

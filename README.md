@@ -226,8 +226,7 @@ cloudflared tunnel --url http://localhost:5173
 | `src/client/platform` | Where the app is running (browser tab or Discord). The UI only sees this interface. |
 | `src/client/components` | The lobby and game screens. |
 | `data/megalist-normalised.json` | The list the game uses: every scraped season, with a plain-English `accepts` note on answers whose wording is slang or a joke. |
-| `data/megalist.json`, `data/season-27.json` | The scrapes as they came from the [source](#where-the-questions-come-from) (seasons 23 and 24, and season 27), kept untouched as a backup. |
-| `scripts/scrape-season.mjs` | Scrapes another season into `data/season-<n>.json`. |
+| `scripts/scrape-season.mjs` | Scrapes another season into `data/season-<n>.json`, a staging file (not committed) to annotate and merge into the list. |
 
 ### How answers are judged
 

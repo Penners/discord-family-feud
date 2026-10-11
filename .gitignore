@@ -14,6 +14,8 @@ dist/
 # generated
 worker-configuration.d.ts
 *.tsbuildinfo
+# scraper output, merged into the megalist by hand
+data/season-*.json
 
 *.log
 .DS_Store
