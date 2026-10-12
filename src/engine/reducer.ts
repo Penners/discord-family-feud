@@ -16,6 +16,7 @@ import {
   ROUND_MULTIPLIERS,
   SUDDEN_DEATH_MULTIPLIER,
   TARGET_SCORE,
+  readingMs,
 } from "./state";
 import type { FastMoneyState, GameState, QuestionSpec, RoundState, Timings } from "./state";
 
@@ -134,6 +135,7 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
   const stageDuration = (stage: RoundStage): number =>
     ({
       intro: t.introMs,
+      faceoffRead: readingMs(s.round?.question.text ?? "", t),
       faceoffBuzz: t.buzzMs,
       faceoffAnswer: t.faceoffAnswerMs,
       playOrPass: t.decideMs,
@@ -649,6 +651,8 @@ export function reduce(prev: GameState, event: GameEvent, env: EngineEnv): Reduc
         }
         switch (round.stage) {
           case "intro":
+            return enter(round, "faceoffRead", null);
+          case "faceoffRead":
             return enter(round, "faceoffBuzz", null);
           case "faceoffBuzz":
             round.faceoff.deadBuzzes++;

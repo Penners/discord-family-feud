@@ -655,6 +655,9 @@ button.end-game {
 .timer.urgent .timer-bar {
   background: var(--bad);
 }
+.timer.unlocking .timer-bar {
+  background: linear-gradient(90deg, #1c6b3a, #35c26b);
+}
 .timer-text {
   position: absolute;
   inset: 0;
@@ -715,6 +718,11 @@ button.end-game {
   font-weight: 600;
   text-transform: none;
   opacity: 0.85;
+}
+.buzzer.locked {
+  filter: grayscale(0.85) brightness(0.6);
+  cursor: not-allowed;
+  animation: none;
 }
 .buzzer:active {
   transform: translateY(6px);

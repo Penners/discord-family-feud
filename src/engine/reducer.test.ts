@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Question } from "../shared/types";
 import { reduce } from "./reducer";
 import type { GameEvent } from "./reducer";
-import { DEFAULT_TIMINGS, initialState, toPublicState } from "./state";
+import { DEFAULT_TIMINGS, initialState, readingMs, toPublicState } from "./state";
 import type { GameState, QuestionSpec } from "./state";
 
 const BOARD = [40, 25, 15, 10, 6, 4];
@@ -59,6 +59,8 @@ const setup = (teamA = ["a1", "a2"], teamB = ["b1", "b2"]) => {
 const startToBuzz = () => {
   send({ type: "start", playerId: "a1" });
   expire();
+  expect(round().stage).toBe("faceoffRead");
+  expire();
   expect(round().stage).toBe("faceoffBuzz");
 };
 
@@ -72,6 +74,7 @@ const teamAPlays = () => {
 /** Team A wins the current round outright by clearing the board. */
 const teamAClearsBoard = () => {
   expire(); // intro
+  expire(); // reading time
   const lead = round().faceoff.pair.a;
   send({ type: "buzz", playerId: lead });
   answer(lead, 0);
@@ -426,6 +429,7 @@ describe("game structure", () => {
     send({ type: "start", playerId: "a1" });
     for (let r = 0; r < 4; r++) {
       expire(); // intro
+      expire(); // reading time
       expire(); // nobody buzzes
       expire(); // nobody buzzes again: question thrown out
       expect(round().result?.via).toBe("void");
@@ -435,7 +439,8 @@ describe("game structure", () => {
     expect(round()).toMatchObject({ kind: "suddenDeath", multiplier: 3 });
     expect(round().question.answers).toHaveLength(1);
 
-    expire();
+    expire(); // intro
+    expire(); // reading time
     send({ type: "buzz", playerId: "a1" });
     answer("a1", null);
     answer("b1", 0);
@@ -562,10 +567,11 @@ describe("fast money", () => {
     send({ type: "start", playerId: "a1" });
     // Four void rounds, then three void sudden deaths, with the scores level at zero.
     for (let r = 0; r < 7; r++) {
-      expire();
-      expire();
-      expire();
-      expire();
+      expire(); // intro
+      expire(); // reading time
+      expire(); // nobody buzzes
+      expire(); // nobody buzzes again
+      expire(); // round summary
     }
     expect(state).toMatchObject({ phase: "finished", winner: null, fastMoney: null });
   });
@@ -710,6 +716,36 @@ describe("fast money", () => {
     }
     send({ type: "endGame", playerId: "b1" });
     expect(state).toMatchObject({ phase: "lobby", fastMoney: null, judgeDown: false });
+  });
+});
+
+describe("reading time", () => {
+  it("shows the question with the buzzers locked before they open", () => {
+    setup();
+    send({ type: "start", playerId: "a1" });
+    expire();
+    expect(round().stage).toBe("faceoffRead");
+    expect(rejected({ type: "buzz", playerId: "a1" })).toMatch(/not open/i);
+    expire();
+    expect(round().stage).toBe("faceoffBuzz");
+    send({ type: "buzz", playerId: "a1" });
+    expect(round().stage).toBe("faceoffAnswer");
+  });
+
+  it("gives a longer question longer, within a floor and a ceiling", () => {
+    const words = (n: number) => Array.from({ length: n }, () => "word").join(" ");
+    const { readMinMs, readMaxMs, readPerWordMs } = DEFAULT_TIMINGS;
+    expect(readingMs(words(3))).toBe(readMinMs);
+    expect(readingMs(words(15))).toBe(15 * readPerWordMs);
+    expect(readingMs(words(20))).toBeGreaterThan(readingMs(words(15)));
+    expect(readingMs(words(80))).toBe(readMaxMs);
+  });
+
+  it("does not repeat the reading time when the next pair steps up", () => {
+    setup();
+    startToBuzz();
+    expire(); // nobody buzzes
+    expect(round().stage).toBe("faceoffBuzz");
   });
 });
 

@@ -13,7 +13,12 @@ import type {
 } from "../shared/types";
 
 export interface Timings {
+  /** The round title card, before the question appears. */
   introMs: number;
+  /** Reading time before the buzzers open: per word of the question, within these limits. */
+  readPerWordMs: number;
+  readMinMs: number;
+  readMaxMs: number;
   buzzMs: number;
   faceoffAnswerMs: number;
   decideMs: number;
@@ -32,7 +37,10 @@ export interface Timings {
 }
 
 export const DEFAULT_TIMINGS: Timings = {
-  introMs: 4_000,
+  introMs: 2_500,
+  readPerWordMs: 300,
+  readMinMs: 2_500,
+  readMaxMs: 9_000,
   buzzMs: 30_000,
   faceoffAnswerMs: 30_000,
   decideMs: 30_000,
@@ -44,6 +52,12 @@ export const DEFAULT_TIMINGS: Timings = {
   fastMoneyIntroMs: 6_000,
   fastMoneyTurnMs: [60_000, 60_000],
   fastMoneyRevealMs: 10_000,
+};
+
+/** How long a question is on screen before the buzzers open: longer questions get longer. */
+export const readingMs = (question: string, t: Timings = DEFAULT_TIMINGS): number => {
+  const words = question.trim().split(/\s+/).length;
+  return Math.min(t.readMaxMs, Math.max(t.readMinMs, words * t.readPerWordMs));
 };
 
 export const TARGET_SCORE = 300;

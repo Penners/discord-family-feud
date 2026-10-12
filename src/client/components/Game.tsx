@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { DEFAULT_TIMINGS } from "../../engine/state";
+import { DEFAULT_TIMINGS, readingMs } from "../../engine/state";
 import { MAX_ANSWER_LENGTH } from "../../shared/protocol";
 import { otherTeam, TEAM_IDS } from "../../shared/types";
 import type { Attempt, Player, PublicRound, PublicState, RoundStage, TeamId } from "../../shared/types";
@@ -10,7 +10,7 @@ import { send, useStore } from "../store";
 import { Avatar } from "./Avatar";
 import { Board } from "./Board";
 
-const STAGE_MS: Record<RoundStage, number> = {
+const STAGE_MS: Record<Exclude<RoundStage, "faceoffRead">, number> = {
   intro: DEFAULT_TIMINGS.introMs,
   faceoffBuzz: DEFAULT_TIMINGS.buzzMs,
   faceoffAnswer: DEFAULT_TIMINGS.faceoffAnswerMs,
@@ -21,6 +21,12 @@ const STAGE_MS: Record<RoundStage, number> = {
 };
 
 const TIMED_STAGES: RoundStage[] = ["faceoffBuzz", "faceoffAnswer", "playOrPass", "play", "steal"];
+
+/** How long the current stage lasts; the reading stage depends on the question. */
+const stageMs = (round: PublicRound): number =>
+  round.stage === "faceoffRead" ? readingMs(round.question) : STAGE_MS[round.stage];
+
+const atPodium = (stage: RoundStage) => stage === "faceoffRead" || stage === "faceoffBuzz";
 
 const roundTitle = (game: PublicState, round: PublicRound) => {
   if (round.kind === "suddenDeath") return "Sudden death";
@@ -103,7 +109,7 @@ function useAttemptFlash(attempt: Attempt | null): Attempt | null {
 
 function TeamPanel({ team, game, round, me }: { team: TeamId; game: PublicState; round: PublicRound; me: Player }) {
   const players = game.players.filter((p) => p.team === team);
-  const inFaceoff = round.stage === "faceoffBuzz" || round.stage === "faceoffAnswer";
+  const inFaceoff = atPodium(round.stage) || round.stage === "faceoffAnswer";
   const playing = game.phase === "playing" && round.controllingTeam === team && (round.stage === "play" || round.stage === "steal");
   const winner = game.phase === "finished" && game.winner === team;
   return (
@@ -155,6 +161,9 @@ function Status({ game, round, name }: { game: PublicState; round: PublicRound; 
       case "intro":
         text = "Get ready…";
         break;
+      case "faceoffRead":
+        text = `Face-off: ${name(round.faceoffPlayers.a)} vs ${name(round.faceoffPlayers.b)}. Read the question…`;
+        break;
       case "faceoffBuzz":
         text = `Face-off: ${name(round.faceoffPlayers.a)} vs ${name(round.faceoffPlayers.b)}. Buzz in!`;
         break;
@@ -180,7 +189,7 @@ function Status({ game, round, name }: { game: PublicState; round: PublicRound; 
   const spotlightIds =
     game.phase !== "playing"
       ? []
-      : round.stage === "faceoffBuzz"
+      : atPodium(round.stage)
         ? [round.faceoffPlayers.a, round.faceoffPlayers.b]
         : [round.pending?.playerId ?? round.activePlayerId];
   const spotlight = spotlightIds.flatMap((id) => game.players.find((p) => p.id === id) ?? []);
@@ -239,13 +248,23 @@ const resultText = (game: PublicState, round: PublicRound) => {
 
 function Timer({ round }: { round: PublicRound }) {
   const countdown = useCountdown(round.deadline);
-  const timed = TIMED_STAGES.includes(round.stage) && countdown !== null && !round.pending;
   const remaining = countdown ?? 0;
-  const fraction = timed ? Math.min(1, remaining / STAGE_MS[round.stage]) : 0;
+  // While the question is being read, the bar fills up to the moment the buzzers open.
+  if (round.stage === "faceoffRead" && countdown !== null) {
+    const filled = 1 - Math.min(1, remaining / stageMs(round));
+    return (
+      <div className="timer unlocking">
+        <div className="timer-bar" style={{ transform: `scaleX(${filled})` }} />
+        <span className="timer-text">Buzzers open in {Math.ceil(remaining / 1000)}</span>
+      </div>
+    );
+  }
+  const timed = TIMED_STAGES.includes(round.stage) && countdown !== null && !round.pending;
+  const fraction = timed ? Math.min(1, remaining / stageMs(round)) : 0;
   return (
     <div className={`timer ${timed ? "" : "idle"} ${timed && remaining < 5000 ? "urgent" : ""}`}>
       <div className="timer-bar" style={{ transform: `scaleX(${fraction})` }} />
-      <span className="timer-text">{timed ? Math.ceil(Math.min(remaining, STAGE_MS[round.stage]) / 1000) : ""}</span>
+      <span className="timer-text">{timed ? Math.ceil(Math.min(remaining, stageMs(round)) / 1000) : ""}</span>
     </div>
   );
 }
@@ -277,6 +296,14 @@ function Actions({
     );
   }
 
+  if (round.stage === "faceoffRead" && round.faceoffPlayers[me.team] === me.id) {
+    return (
+      <button className="buzzer locked" disabled>
+        Wait
+        <small>read the question</small>
+      </button>
+    );
+  }
   if (round.stage === "faceoffBuzz" && round.faceoffPlayers[me.team] === me.id) return <Buzzer />;
   if (myTurn && answering) return <AnswerForm key={`${round.stage}-${round.lastAttempt?.seq ?? 0}`} />;
   if (myTurn && round.stage === "playOrPass") {
@@ -294,7 +321,7 @@ function Actions({
 
   let hint = "";
   if (round.pending) hint = "Checking the survey…";
-  else if (round.stage === "faceoffBuzz") hint = "Your teammate is at the podium.";
+  else if (atPodium(round.stage)) hint = "Your teammate is at the podium.";
   else if (round.stage === "roundEnd") hint = "Next round coming up…";
   else if (round.stage === "steal" && teamOnTheClock(game, round) === me.team) hint = `Help ${name(round.activePlayerId)} pick the steal answer!`;
   else if (answering || round.stage === "playOrPass") hint = `Waiting for ${name(round.activePlayerId)}…`;

@@ -34,6 +34,8 @@ export type RoundKind = "normal" | "suddenDeath";
 
 export type RoundStage =
   | "intro"
+  /** The question is showing but the buzzers are still locked. */
+  | "faceoffRead"
   | "faceoffBuzz"
   | "faceoffAnswer"
   | "playOrPass"
